@@ -144,7 +144,7 @@ docker compose run --rm backend python src/init_db.py
 
 Upon successful execution, you will see output like `Database tables created.`
 
-### 5. Create an Admin User (Optional, but Recommended)
+### 5. Create an Admin User 
 
 To access the admin panel, you need to create an admin user. The following script will create an `admin` user with the password `admin123`.
 
@@ -166,19 +166,20 @@ docker compose restart backend
 
 Once all setup steps are complete, your application will be running in Docker.
 
-- **Chatbot Application**: Access at `http://localhost:8000/chat`
 - **Admin Panel**: Access at `http://localhost:8000/admin` (Login with `admin` / `admin123`)
-
-### Using the Chatbot
-
-1.  Open `http://localhost:8000/chat` in your browser.
-2.  If you are not logged in, you will be redirected to the login page. Use the credentials you created (e.g., `admin` / `admin123`).
-3.  You will see an engaging welcome screen. Type your message in the input box at the bottom to start a conversation.
-4.  Each new message will start a new conversation if you haven't selected one from the history.
-5.  Your conversation history will appear in the left sidebar. You can click on a history item to resume a previous conversation, rename it, or delete it.
+- **Chatbot Application**: Access at `http://localhost:8000/chat`
 
 ### Using the Admin Panel
 
-1.  Open `http://localhost:8000/admin` in your browser.
-2.  Log in with your admin credentials.
-3.  You can view and manage users here.
+1.  Log in as admin and you will be redirected to `http://localhost:8000/admin` in your browser.
+2.  You can view and manage users here.
+3.  You can provide PDF documents to improve the chatbot’s knowledge through RAG. 
+
+### Using the Chatbot
+
+1.  Log in as user and you will be redirected to `http://localhost:8000/chat` in your browser.
+2.  You will see an engaging welcome screen. Type your message in the input box at the bottom to start a conversation.
+3.  Each new message will start a new conversation if you haven't selected one from the history.
+4.  Your conversation history will appear in the left sidebar. You can click on a history item to resume a previous conversation, rename it, or delete it.
+
+
