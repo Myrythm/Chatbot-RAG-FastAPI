@@ -72,11 +72,17 @@ Ensure you have the following installed on your system:
     │   └── frontend.py
     └── static/           # Static files (HTML, CSS, JS for frontend)
         ├── admin/
+        │   ├── admin.html
+        │   ├── admin.js
+        │   └── admin.css
         ├── chat/
         │   ├── index.html
         │   ├── script.js
         │   └── style.css
         └── login/
+            ├── login.html
+            ├── login.js
+            └── login.css
 ```
 
 ## Setup Guide
