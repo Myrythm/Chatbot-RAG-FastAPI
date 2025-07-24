@@ -1,0 +1,15 @@
+
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+python-dotenv
+google-generativeai
+pgvector
+
+passlib[bcrypt]
+# Untuk SQLAlchemy 2.0 async
+asyncpg
+python-jose
+python-multipart
+pypdf

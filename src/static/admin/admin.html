@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Gemini Chatbot</title>
+  <link rel="stylesheet" href="/static/admin/admin.css">
+</head>
+<body>
+  <div class="admin-dashboard">
+    <aside class="admin-sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-icon"><i class="fas fa-user-shield"></i></div>
+          <div class="brand-text">
+            <h1>Admin Gemini</h1>
+            <p>Chatbot Management</p>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div id="admin-info" class="admin-info"></div>
+        <nav class="admin-nav">
+          <ul>
+            <li><a href="#upload" class="admin-nav-link" id="nav-upload"><i class="fas fa-upload"></i> Upload Dokumen</a></li>
+            <li><a href="#users" class="admin-nav-link" id="nav-users"><i class="fas fa-users"></i> Daftar User</a></li>
+            <li><a href="#documents" class="admin-nav-link" id="nav-documents"><i class="fas fa-file-alt"></i> Daftar Dokumen</a></li>
+            <li><a href="#register" class="admin-nav-link" id="nav-register"><i class="fas fa-user-plus"></i> Register User</a></li>
+            <li><button class="btn-glass" onclick="logout()" style="width:100%;margin-top:1rem;"><i class="fas fa-sign-out-alt"></i> Logout</button></li>
+          </ul>
+        </nav>
+      </div>
+      <!-- Register User dipindah ke main section -->
+    </aside>
+    <main class="admin-main">
+      <section class="admin-section" id="section-upload">
+        <h2>Upload Dokumen RAG</h2>
+        <form id="upload-form" class="form-modern">
+          <input type="file" id="doc-file" required>
+          <button type="submit" class="btn-glass">Upload</button>
+        </form>
+        <div id="upload-status" class="form-message"></div>
+      </section>
+      <section class="admin-section" id="section-users">
+        <h2>Daftar User</h2>
+        <div class="admin-users-list" id="admin-users-list">
+          <table id="users-table" class="users-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body">
+              <!-- User rows will be injected here by JS -->
+            </tbody>
+          </table>
+          <div id="users-message" class="form-message"></div>
+        </div>
+        <!-- Modal Edit User -->
+        <div id="edit-user-modal" class="modal" style="display:none;">
+          <div class="modal-content">
+            <span class="close" id="close-edit-user-modal">&times;</span>
+            <h3>Edit User</h3>
+            <form id="edit-user-form" class="form-modern">
+              <input type="hidden" id="edit-user-id">
+              <label>Username</label>
+              <input type="text" id="edit-username" required>
+              <label>Password (kosongkan jika tidak diubah)</label>
+              <input type="password" id="edit-password">
+              <label>Role</label>
+              <select id="edit-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+              <label>Status</label>
+              <select id="edit-active">
+                <option value="true">Aktif</option>
+                <option value="false">Nonaktif</option>
+              </select>
+              <button type="submit" class="btn-glass">Simpan</button>
+            </form>
+            <div id="edit-user-message" class="form-message"></div>
+          </div>
+        </div>
+      </section>
+      <section class="admin-section" id="section-documents">
+        <h2>Daftar Dokumen RAG (Coming Soon)</h2>
+        <div class="admin-documents-list" id="admin-documents-list"></div>
+      </section>
+      <section class="admin-section" id="section-register">
+        <h2>Register User Baru</h2>
+        <form id="register-user-form" class="form-modern">
+          <input type="text" id="reg-username" placeholder="Username" required>
+          <input type="password" id="reg-password" placeholder="Password" required>
+          <select id="reg-role">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit" class="btn-glass">Register</button>
+        </form>
+        <div id="register-user-message" class="form-message"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/admin/admin.js"></script>
+</body>
+</html>
