@@ -40,8 +40,6 @@ This project is a robust and interactive AI chatbot implementation using the Goo
   - **PostgreSQL**: A powerful, open-source relational database system.
 - **Frontend**:
   - **HTML5, CSS3, JavaScript (Vanilla JS)**: For the user interface.
-  - **Font Awesome**: For icons.
-  - **Google Fonts (Inter)**: For typography.
   - **Bootstrap 5.3.0**: For some basic utilities.
 - **Deployment**:
   - **Docker & Docker Compose**: For container orchestration.
