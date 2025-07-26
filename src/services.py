@@ -1,13 +1,19 @@
 import os
 import uuid
 import asyncio
-import google.generativeai as genai
 from jose import jwt
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 from . import database as db
+from .database import async_session
 from . import schemas
+from .database import Document, DocumentChunk
 
 # JWT config
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")
@@ -23,7 +29,6 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
 async def authenticate_user(session: AsyncSession, username: str, password: str):
     result = await session.execute(select(db.User).filter_by(username=username))
     user = result.scalars().first()
@@ -31,23 +36,130 @@ async def authenticate_user(session: AsyncSession, username: str, password: str)
         return user
     return None
 
-
 async def get_user_by_username(session: AsyncSession, username: str):
     result = await session.execute(select(db.User).filter_by(username=username))
     return result.scalars().first()
 
-# Konfigurasi Gemini API
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-# Ambil nama model dari environment variables
+# LangChain configuration
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_SUMMARY_MODEL = os.getenv("GEMINI_SUMMARY_MODEL", GEMINI_MODEL)
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/embedding-001")
 
+# Initialize LangChain models
+llm = ChatGoogleGenerativeAI(
+    model=GEMINI_MODEL,
+    temperature=0.7
+)
 
-# Fungsi untuk membuat embedding
+summary_llm = ChatGoogleGenerativeAI(
+    model=os.getenv("GEMINI_SUMMARY_MODEL", GEMINI_MODEL),
+    temperature=0.3
+)
+
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/embedding-001"
+)
+
+# Function to create embeddings
 def make_embedding(text: str):
-    return genai.embed_content(model=EMBEDDING_MODEL, content=text)["embedding"]
+    return embeddings.embed_query(text)
+
+
+# Text splitter untuk chunking dokumen
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=200,
+    length_function=len,
+    separators=["\n\n", "\n", " ", ""]
+)
+
+
+# RAG Functions
+async def process_pdf_document(
+    session: AsyncSession, 
+    file_path: str, 
+    filename: str, 
+    uploaded_by: uuid.UUID
+) -> db.Document:
+    """Proses PDF dan simpan ke database dengan chunking yang proper"""
+    
+    # Baca PDF
+    reader = PdfReader(file_path)
+    
+    # Buat dokumen record
+    document = db.Document(
+        filename=filename,
+        title=filename.replace('.pdf', ''),
+        file_path=file_path,
+        file_size=f"{os.path.getsize(file_path)} bytes",
+        uploaded_by=uploaded_by
+    )
+    session.add(document)
+    await session.commit()
+    await session.refresh(document)
+    
+    # Proses setiap halaman
+    for page_num, page in enumerate(reader.pages, 1):
+        text = page.extract_text()
+        if not text.strip():
+            continue
+            
+        # Split text menjadi chunks
+        chunks = text_splitter.split_text(text)
+        
+        # Simpan setiap chunk
+        for chunk_idx, chunk in enumerate(chunks):
+            if not chunk.strip():
+                continue
+                
+            # Buat embedding
+            embedding = make_embedding(chunk)
+            
+            # Buat chunk record
+            chunk_record = db.DocumentChunk(
+                document_id=document.id,
+                chunk_index=f"page_{page_num}_chunk_{chunk_idx}",
+                content=chunk,
+                content_embedding=embedding,
+                page_number=str(page_num)
+            )
+            session.add(chunk_record)
+    
+    await session.commit()
+    return document
+
+async def get_relevant_document_chunks(
+    session: AsyncSession, 
+    query: str, 
+    limit: int = 5
+) -> list[str]:
+    """Ambil chunk dokumen yang relevan berdasarkan query"""
+    
+    print(f"🔍 RAG DEBUG: Searching for chunks with query: '{query}'")
+    
+    try:
+        query_embedding = make_embedding(query)
+        print(f"🔍 RAG DEBUG: Query embedding created, length: {len(query_embedding)}")
+        
+        # Simplified query - just get all chunks first, then order by distance
+        result = await session.execute(
+            select(DocumentChunk.content, DocumentChunk.content_embedding)
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .filter(Document.is_active == True)
+            .order_by(DocumentChunk.content_embedding.l2_distance(query_embedding))
+            .limit(limit)
+        )
+        
+        chunks = [row[0] for row in result.all()]
+        print(f"🔍 RAG DEBUG: Found {len(chunks)} chunks")
+        if chunks:
+            print(f"🔍 RAG DEBUG: First chunk preview: {chunks[0][:100]}...")
+        else:
+            print("🔍 RAG DEBUG: No chunks found!")
+            
+        return chunks
+        
+    except Exception as e:
+        print(f"🔍 RAG DEBUG: Error in get_relevant_document_chunks: {e}")
+        return []
 
 
 async def get_or_create_conversation(
@@ -61,7 +173,7 @@ async def get_or_create_conversation(
         if conversation:
             return conversation
 
-    # Jika tidak ada atau tidak ditemukan, buat baru
+    # Create new conversation if not found
     new_conversation = db.Conversation(user_id=user_id)
     session.add(new_conversation)
     await session.commit()
@@ -90,7 +202,7 @@ async def get_chat_history(
         .order_by(db.Message.created_at.desc())
         .limit(limit)
     )
-    # Return dalam urutan kronologis
+    # Return in chronological order
     return list(reversed(result.scalars().all()))
 
 
@@ -108,51 +220,147 @@ async def get_relevant_memories(
     return [row[0] for row in result.all()]
 
 
-# --- UTILITAS PROMPT DAN SUMMARY ---
-def build_prompt(memories, history):
-    prompt_parts = ["Kamu adalah asisten yang membantu dan ramah."]
-    if memories:
-        prompt_parts.append("\nIngat percakapan relevan ini dari masa lalu:")
-        for mem in memories:
-            prompt_parts.append(f"- {mem}")
-    prompt_parts.append("\nIni adalah riwayat percakapan saat ini:")
-    chat_history_for_prompt = [f"{msg.sender_role}: {msg.content}" for msg in history]
-    prompt_parts.extend(chat_history_for_prompt)
-    return "\n".join(prompt_parts)
+# LangChain prompt templates
+chat_prompt = ChatPromptTemplate.from_messages([
+    ("system", """Kamu adalah asisten AI yang cerdas, ramah, dan sangat membantu. Kamu memiliki kemampuan untuk:
 
+1. Memberikan jawaban yang akurat dan informatif
+2. Berkomunikasi dengan sopan dan profesional
+3. Menggunakan konteks dari percakapan sebelumnya untuk memberikan respons yang relevan
+4. Mengingat informasi penting dari percakapan masa lalu pengguna
+5. Memberikan saran yang bermanfaat dan praktis
+6. Menjelaskan hal-hal kompleks dengan cara yang mudah dipahami
 
-async def is_substantive_content(content: str, model_name: str) -> bool:
-    """Uses Gemini to determine if the content is substantive enough for a summary."""
-    prompt = (
-        "Given the following chat message(s), determine if the content is substantive enough to generate a meaningful conversation summary. "
-        "Respond with 'YES' if it is substantive, and 'NO' if it is a greeting, a simple acknowledgment, or a non-substantive response. "
-        "Your response must be either 'YES' or 'NO'.\n\nMessages: "
-        + content
-    )
+Gaya komunikasi kamu:
+- Ramah tapi tetap profesional
+- Jelas dan mudah dipahami
+- Responsif terhadap kebutuhan pengguna
+- Menggunakan bahasa Indonesia yang baik dan benar
+- Memberikan contoh atau analogi jika diperlukan
+- Tidak perlu berterimakasih diawal jawaban kamu
+- Jika pengguna meminta informasi lebih lanjut, tawarkan untuk mencari informasi lebih lanjut
+
+Jika kamu tidak yakin tentang sesuatu, jujur mengatakannya dan tawarkan untuk mencari informasi lebih lanjut."""),
+    ("human", """{memories_text}
+
+Riwayat percakapan saat ini:
+{chat_history}
+
+Pesan pengguna: {user_message}
+
+Berikan respons yang membantu, relevan, dan sesuai dengan konteks percakapan di atas.""")
+])
+
+summary_prompt = ChatPromptTemplate.from_messages([
+    ("system", """Kamu adalah ahli dalam membuat judul yang ringkas dan informatif. Tugas kamu adalah membuat satu judul singkat (maksimal 7 kata) yang paling relevan dan mewakili konteks percakapan.
+
+Panduan:
+- Gunakan kata-kata yang spesifik dan deskriptif
+- Hindari kata-kata umum seperti "percakapan" atau "chat"
+- Fokus pada topik utama yang dibahas
+- Gunakan bahasa Indonesia yang baik
+- Jangan tambahkan tanda kutip atau format khusus
+- Hanya berikan judul saja, tanpa penjelasan tambahan
+
+Contoh judul yang baik:
+- "Cara Membuat Website dengan React"
+- "Tips Investasi Saham untuk Pemula"
+- "Resep Masakan Nusantara"
+- "Troubleshooting Laptop Lambat"
+
+Contoh judul yang kurang baik:
+- "Percakapan tentang teknologi"
+- "Chat dengan asisten"
+- "Pertanyaan dan jawaban"""),
+    ("human", "Buatkan judul untuk percakapan berikut:\n\n{chat_content}")
+])
+
+substantive_prompt = ChatPromptTemplate.from_messages([
+    ("system", """Kamu adalah sistem yang mengevaluasi apakah konten percakapan cukup substantif untuk dibuatkan ringkasan yang bermakna.
+
+Kriteria konten SUBSTANTIF (jawab 'YES'):
+- Berisi pertanyaan spesifik yang memerlukan penjelasan
+- Membahas topik atau konsep tertentu
+- Meminta saran, rekomendasi, atau bantuan teknis
+- Berisi informasi atau pengetahuan yang bisa diringkas
+- Memiliki nilai edukatif atau informatif
+
+Kriteria konten TIDAK SUBSTANTIF (jawab 'NO'):
+- Salam atau ucapan sederhana (halo, selamat pagi, dll)
+- Ucapan terima kasih tanpa konteks tambahan
+- Konfirmasi sederhana (ok, baik, setuju)
+- Emoji atau reaksi tanpa teks
+- Pesan yang terlalu pendek dan tidak informatif
+
+Instruksi:
+- Analisis konten dengan cermat
+- Pertimbangkan konteks dan nilai informatif
+- Jawab hanya dengan 'YES' atau 'NO'
+- Tidak ada penjelasan tambahan"""),
+    ("human", "Evaluasi apakah konten berikut substantif untuk dibuatkan ringkasan:\n\n{content}")
+])
+
+# Create LangChain chains
+chat_chain = LLMChain(llm=llm, prompt=chat_prompt)
+summary_chain = LLMChain(llm=summary_llm, prompt=summary_prompt)
+substantive_chain = LLMChain(llm=summary_llm, prompt=substantive_prompt)
+
+# Update chat prompt untuk include dokumen
+rag_chat_prompt = ChatPromptTemplate.from_messages([
+    ("system", """Kamu adalah asisten AI yang cerdas, ramah, dan sangat membantu. Kamu memiliki kemampuan untuk:
+
+1. Memberikan jawaban yang akurat dan informatif berdasarkan pengetahuan umum
+2. Menggunakan informasi dari dokumen yang telah diupload untuk memberikan jawaban yang lebih spesifik dan akurat
+3. Berkomunikasi dengan sopan dan profesional
+4. Menggunakan konteks dari percakapan sebelumnya untuk memberikan respons yang relevan
+5. Mengingat informasi penting dari percakapan masa lalu pengguna
+6. Memberikan saran yang bermanfaat dan praktis
+7. Menjelaskan hal-hal kompleks dengan cara yang mudah dipahami
+
+Gaya komunikasi kamu:
+- Ramah tapi tetap profesional
+- Jelas dan mudah dipahami
+- Responsif terhadap kebutuhan pengguna
+- Menggunakan bahasa Indonesia yang baik dan benar
+- Memberikan contoh atau analogi jika diperlukan
+- Tidak perlu berterimakasih diawal jawaban kamu
+- Jika pengguna meminta informasi lebih lanjut, tawarkan untuk mencari informasi lebih lanjut
+
+Jika kamu tidak yakin tentang sesuatu, jujur mengatakannya dan tawarkan untuk mencari informasi lebih lanjut.
+
+Ketika menggunakan informasi dari dokumen, selalu sebutkan sumbernya dengan sopan."""),
+    ("human", """{document_context}
+
+{memories_text}
+
+Riwayat percakapan saat ini:
+{chat_history}
+
+Pesan pengguna: {user_message}
+
+Berikan respons yang membantu, relevan, dan sesuai dengan konteks percakapan di atas. Jika ada informasi dari dokumen yang relevan, gunakan informasi tersebut untuk memberikan jawaban yang lebih akurat.""")
+])
+
+# Create RAG chat chain
+rag_chat_chain = LLMChain(llm=llm, prompt=rag_chat_prompt)
+
+async def is_substantive_content(content: str) -> bool:
+    """Uses LangChain to determine if the content is substantive enough for a summary."""
     try:
-        model = genai.GenerativeModel(model_name)
-        response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=5)
-        result = response.text.strip().upper()
-        print(f"[DEBUG SUBSTANTIVE] Content: '{content}', Gemini response: '{result}'")
+        result = await asyncio.wait_for(
+            substantive_chain.arun(content=content), timeout=5
+        )
+        result = result.strip().upper()
         return result == "YES"
     except Exception as e:
-        print(f"[DEBUG SUBSTANTIVE ERROR] Failed to check substantive content: {e}")
-        return False # Default to non-substantive on error
+        return False
 
 
 async def generate_summary(
-    session, conversation, summary_model_name, user_message_content: str = None
+    session, conversation, user_message_content: str = None
 ):
-    print(f"[DEBUG SUMMARY] User message: '{user_message_content}'")
-    print(f"[DEBUG SUMMARY] Initial conversation summary: '{conversation.summary}'")
-
-    # Remove hardcoded lists
-    # common_greetings = [...]
-    # non_substantive_responses = [...]
-
-    # Use Gemini to check if current message is substantive
-    is_current_message_substantive = await is_substantive_content(user_message_content, summary_model_name)
-    print(f"[DEBUG SUMMARY] Is current message substantive? {is_current_message_substantive}")
+    # Use LangChain to check if current message is substantive
+    is_current_message_substantive = await is_substantive_content(user_message_content)
 
     # Case 1: A meaningful summary already exists. Do not update.
     if (
@@ -160,83 +368,60 @@ async def generate_summary(
         and conversation.summary.strip() != ""
         and conversation.summary.strip().lower() != "new conversation"
     ):
-        print("[DEBUG SUMMARY] Case 1: Meaningful summary exists. Returning existing.")
         return conversation.summary
 
-    # Case 2: Conversation is new (no summary or "New Conversation") AND current message is NOT substantive.
-    # Set/keep "New Conversation" as summary.
+    # Case 2: Conversation is new AND current message is NOT substantive.
     if not is_current_message_substantive and (
         not conversation.summary
         or conversation.summary.strip().lower() == "new conversation"
     ):
-        print("[DEBUG SUMMARY] Case 2: Not substantive and new/default summary. Setting to 'New Conversation'.")
-        if (
-            not conversation.summary or conversation.summary.strip() == ""
-        ):  # Only commit if it was truly empty
+        if not conversation.summary or conversation.summary.strip() == "":
             conversation.summary = "New Conversation"
             await session.commit()
-            print("[DEBUG SUMMARY] Committed 'New Conversation'.")
         return conversation.summary
 
-    # Case 3: Conversation is new (no summary or "New Conversation") AND current message IS substantive.
-    # This is when we want to generate the first meaningful summary.
+    # Case 3: Conversation is new AND current message IS substantive.
     if (
         not conversation.summary
         or conversation.summary.strip().lower() == "new conversation"
     ) and is_current_message_substantive:
-        print("[DEBUG SUMMARY] Case 3: Substantive and new/default summary. Generating new summary.")
         try:
             all_msgs = await get_chat_history(session, conversation.id, limit=100)
 
-            # Use Gemini to check if the entire history is substantive
+            # Use LangChain to check if the entire history is substantive
             chat_lines = " | ".join(
                 [f"{msg.sender_role}: {msg.content}" for msg in all_msgs]
             )
-            is_history_substantive = await is_substantive_content(chat_lines, summary_model_name)
+            is_history_substantive = await is_substantive_content(chat_lines)
 
             if not is_history_substantive:
-                print("[DEBUG SUMMARY] History not yet substantive. Keeping 'New Conversation'.")
                 conversation.summary = "New Conversation"
                 await session.commit()
                 return conversation.summary
 
-            summary_model = genai.GenerativeModel(summary_model_name)
-
-            chat_lines = " | ".join(
-                [f"{msg.sender_role}: {msg.content}" for msg in all_msgs]
+            # Generate summary using LangChain
+            new_summary = await asyncio.wait_for(
+                summary_chain.arun(chat_content=chat_lines), timeout=10
             )
-            summary_prompt = (
-                "Buatkan satu judul singkat (maksimal 7 kata) yang paling relevan dan mewakili konteks percakapan berikut, tanpa teks tambahan atau daftar pilihan. Hanya berikan judulnya saja: "
-                + chat_lines
-            )
-            summary_resp = await summary_model.generate_content_async(summary_prompt)
-            new_summary = summary_resp.text.strip().replace("\n", " ")
-            print(f"[DEBUG SUMMARY] Generated new summary: {new_summary}")
+            new_summary = new_summary.strip().replace("\n", " ")
 
             if new_summary and new_summary.strip() != "":
                 conversation.summary = new_summary
                 await session.commit()
-                print("[DEBUG SUMMARY] Committed new summary.")
                 return new_summary
             else:
-                # If generated summary is empty, keep "New Conversation" or existing if any
-                print("[DEBUG SUMMARY] Generated summary was empty. Keeping 'New Conversation'.")
                 if not conversation.summary:
                     conversation.summary = "New Conversation"
                     await session.commit()
-                    print("[DEBUG SUMMARY] Committed 'New Conversation' due to empty generated summary.")
                 return conversation.summary
 
         except Exception as e:
-            print("[DEBUG SUMMARY] [Summary Error]", e)
             if not conversation.summary:
                 conversation.summary = "New Conversation"
                 await session.commit()
-                print("[DEBUG SUMMARY] Committed 'New Conversation' due to error.")
             return conversation.summary
 
     # Fallback: If none of the above conditions are met, return the current summary.
-    print("[DEBUG SUMMARY] Fallback: Returning current summary.")
     return conversation.summary
 
 
@@ -244,51 +429,80 @@ async def generate_summary(
 async def generate_chat_response(
     session: AsyncSession, chat_request: schemas.ChatRequest
 ) -> schemas.ChatResponse:
-    print(f"[DEBUG CHAT] generate_chat_response called for user: {chat_request.user_id}, message: {chat_request.message}")
     conversation = await get_or_create_conversation(
         session, chat_request.user_id, chat_request.conversation_id
     )
+    
     user_message = await add_message_to_db(
         session, conversation.id, "user", chat_request.message, chat_request.timezone
     )
+    
     history = await get_chat_history(session, conversation.id, limit=20)
     memories = await get_relevant_memories(
         session, chat_request.user_id, conversation.id, chat_request.message, limit=1
     )
-    prompt = build_prompt(memories, history)
+    
+    # Get relevant document chunks
+    document_chunks = await get_relevant_document_chunks(
+        session, chat_request.message, limit=3
+    )
+    
+    # Prepare inputs for LangChain
+    memories_text = ""
+    if memories:
+        memories_text = "Ingat percakapan relevan ini dari masa lalu:\n" + "\n".join([f"- {mem}" for mem in memories])
+    
+    document_context = ""
+    if document_chunks:
+        document_context = "Informasi relevan dari dokumen:\n" + "\n".join([f"- {chunk}" for chunk in document_chunks])
+    
+    print(f"🔍 RAG DEBUG: Document context length: {len(document_context)}")
+    if document_context:
+        print(f"🔍 RAG DEBUG: Document context preview: {document_context[:200]}...")
+    else:
+        print("🔍 RAG DEBUG: No document context!")
+    
+    chat_history = "\n".join([f"{msg.sender_role}: {msg.content}" for msg in history])
+    
     ai_response = None
     error_msg = None
+    
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = await asyncio.wait_for(
-            model.generate_content_async(prompt), timeout=15
+        # Use LangChain to generate response
+        ai_response = await asyncio.wait_for(
+            rag_chat_chain.arun(
+                document_context=document_context,
+                memories_text=memories_text,
+                chat_history=chat_history,
+                user_message=chat_request.message
+            ), timeout=15
         )
-        ai_response = response.text
     except asyncio.TimeoutError:
         error_msg = "AI response timeout. Please try again."
     except Exception as e:
         error_msg = f"AI error: {str(e)}"
+    
     if ai_response:
         await add_message_to_db(session, conversation.id, "assistant", ai_response, chat_request.timezone)
     else:
         ai_response = error_msg or "Unknown error."
-    summary = await generate_summary(
-        session, conversation, GEMINI_SUMMARY_MODEL, chat_request.message
-    )
+    
+    summary = await generate_summary(session, conversation, chat_request.message)
+    
+    # Background embedding task
     asyncio.create_task(
         background_embedding_only(session, user_message, conversation, chat_request)
     )
+    
     return schemas.ChatResponse(
         conversation_id=conversation.id, response=ai_response, summary=summary
     )
 
 
-# Fungsi background hanya untuk embedding
+# Background function for embedding only
 async def background_embedding_only(
-    session_unused, user_message, conversation, chat_request
+    _, user_message, conversation, chat_request
 ):
-    from .database import async_session
-
     async with async_session() as session:
         try:
             embedding = make_embedding(chat_request.message)
@@ -301,7 +515,7 @@ async def background_embedding_only(
             session.add(new_memory)
             await session.commit()
         except Exception as e:
-            print("[Embedding Error]", e)
+            pass
 
 
 async def stream_chat_response(
@@ -310,41 +524,60 @@ async def stream_chat_response(
     conversation = await get_or_create_conversation(
         session, chat_request.user_id, chat_request.conversation_id
     )
+    
     user_message = await add_message_to_db(
         session, conversation.id, "user", chat_request.message, chat_request.timezone
     )
+    
     history = await get_chat_history(session, conversation.id, limit=3)
     memories = await get_relevant_memories(
         session, chat_request.user_id, conversation.id, chat_request.message, limit=1
     )
-    prompt = build_prompt(memories, history)
-    model = genai.GenerativeModel(GEMINI_MODEL)
-    stream = model.generate_content(prompt, stream=True)
+    
+    # Get relevant document chunks
+    document_chunks = await get_relevant_document_chunks(
+        session, chat_request.message, limit=3
+    )
+    
+    # Prepare inputs for LangChain
+    memories_text = ""
+    if memories:
+        memories_text = "Ingat percakapan relevan ini dari masa lalu:\n" + "\n".join([f"- {mem}" for mem in memories])
+    
+    document_context = ""
+    if document_chunks:
+        document_context = "Informasi relevan dari dokumen:\n" + "\n".join([f"- {chunk}" for chunk in document_chunks])
+    
+    print(f"🔍 RAG DEBUG STREAM: Document context length: {len(document_context)}")
+    if document_context:
+        print(f"🔍 RAG DEBUG STREAM: Document context preview: {document_context[:200]}...")
+    else:
+        print("🔍 RAG DEBUG STREAM: No document context!")
+    
+    chat_history = "\n".join([f"{msg.sender_role}: {msg.content}" for msg in history])
+    
     ai_response = ""
-
+    
     try:
-        for chunk in stream:
-            # ✨ FIX: Wrap the text access in its own try/except block.
-            # This will safely ignore the final empty chunk that causes the error.
-            try:
-                text_part = chunk.text
-                ai_response += text_part
-                yield text_part
-            except (ValueError, IndexError):
-                # This chunk has no text part, so we just ignore it and continue.
-                pass
-            
-            await asyncio.sleep(0) # Keep yielding control
+        # Use LangChain streaming with RAG
+        async for chunk in llm.astream(
+            rag_chat_prompt.format_messages(
+                document_context=document_context,
+                memories_text=memories_text,
+                chat_history=chat_history,
+                user_message=chat_request.message
+            )
+        ):
+            if chunk.content:
+                ai_response += chunk.content
+                yield chunk.content
             
     except Exception as e:
-        # This will now catch other, more serious stream-level errors.
         yield f"[STREAM ERROR] {str(e)}"
 
     if ai_response:
         await add_message_to_db(session, conversation.id, "assistant", ai_response, chat_request.timezone)
-        await generate_summary(
-            session, conversation, GEMINI_SUMMARY_MODEL, chat_request.message
-        )
+        await generate_summary(session, conversation, chat_request.message)
     
     asyncio.create_task(
         background_embedding_only(session, user_message, conversation, chat_request)

@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const newChatBtn = document.getElementById('new-chat-btn');
     const darkToggle = document.getElementById('dark-toggle');
     
+    // --- Elemen untuk Sidebar Responsif ---
+    const menuToggle = document.getElementById('menu-toggle');
+    const sidebar = document.getElementById('sidebar');
+    let sidebarOverlay; // Akan dibuat secara dinamis
 
     // --- State Aplikasi ---
     let currentConversationId = null;
@@ -63,38 +67,30 @@ document.addEventListener('DOMContentLoaded', () => {
         chatWindow.scrollTop = chatWindow.scrollHeight;
     }
 
-    /**
- * Mengonversi string Markdown general dari LLM menjadi HTML yang terstruktur.
- * Mendukung: Headings (#, ##, ###), Unordered Lists (*), Ordered Lists (1.),
- * Code Blocks (```), Horizontal Rules (---), Bold, Italic, dan Inline Code.
+   /**
+ * Mengonversi string Markdown dari LLM menjadi HTML, dengan dukungan untuk daftar bersarang.
+ * Mendukung: Headings, Unordered/Ordered Lists (termasuk nested), Code Blocks, HR, Bold, Italic, Inline Code.
  */
 function formatMessage(text) {
     const lines = text.split('\n');
     let htmlResult = '';
     
-    // State untuk melacak apakah kita sedang di dalam list atau blok kode
-    let inUnorderedList = false;
-    let inOrderedList = false;
+    // State untuk blok kode
     let inCodeBlock = false;
     let codeLanguage = '';
     let codeContent = '';
+    
+    // Stack untuk mengelola daftar bersarang: { type: 'ul' | 'ol', indent: number }
+    const listStack = [];
 
-    const closeLists = () => {
-        if (inUnorderedList) {
-            htmlResult += '</ul>\n';
-            inUnorderedList = false;
-        }
-        if (inOrderedList) {
-            htmlResult += '</ol>\n';
-            inOrderedList = false;
+    const closeLists = (targetIndent = -1) => {
+        while (listStack.length > 0 && listStack[listStack.length - 1].indent > targetIndent) {
+            const list = listStack.pop();
+            htmlResult += `</${list.type}>\n`;
         }
     };
 
-
-    // --- Ordered List Numbering State ---
-    let orderedListNumber = 1;
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+    for (const line of lines) {
         // --- 1. Handle Blok Kode ---
         if (line.trim().startsWith('```')) {
             if (inCodeBlock) {
@@ -110,86 +106,71 @@ function formatMessage(text) {
                 inCodeBlock = false;
                 codeContent = '';
                 codeLanguage = '';
-                continue;
             } else {
-                closeLists();
+                closeLists(); // Tutup semua daftar sebelum masuk blok kode
                 inCodeBlock = true;
                 codeLanguage = line.trim().substring(3).toUpperCase();
-                continue;
             }
+            continue;
         }
         if (inCodeBlock) {
             codeContent += line + '\n';
             continue;
         }
 
-        // --- 2. Handle Elemen Markdown Lainnya ---
-        // Heading Level 1
-        if (line.startsWith('# ')) {
-            closeLists();
-            htmlResult += `<h1 style="margin-bottom: 0.7em;">${applyInlineFormatting(line.substring(2))}</h1><div style="height:0.7em;"></div>`;
-        }
-        // Heading Level 2
-        else if (line.startsWith('## ')) {
-            closeLists();
-            htmlResult += `<h2 style="margin-bottom: 0.7em;">${applyInlineFormatting(line.substring(3))}</h2><div style="height:0.7em;"></div>`;
-        }
-        // Heading Level 3
-        else if (line.startsWith('### ')) {
-            closeLists();
-            htmlResult += `<h3 style="margin-bottom: 0.7em;">${applyInlineFormatting(line.substring(4))}</h3><div style="height:0.7em;"></div>`;
-        }
-        // Unordered List
-        else if (line.startsWith('* ')) {
-            if (inOrderedList) closeLists();
-            if (!inUnorderedList) {
-                htmlResult += '<ul class="custom-bullet-list">\n';
-                inUnorderedList = true;
+        const indent = line.match(/^\s*/)[0].length;
+        const trimmedLine = line.trim();
+        const currentList = listStack.length > 0 ? listStack[listStack.length - 1] : null;
+
+        // --- 2. Handle Daftar (Unordered & Ordered) ---
+        const ulMatch = trimmedLine.match(/^(\*|-)\s+(.*)/);
+        const olMatch = trimmedLine.match(/^(\d+)\.\s+(.*)/);
+
+        if (ulMatch || olMatch) {
+            const isUl = !!ulMatch;
+            const content = isUl ? ulMatch[2] : olMatch[2];
+            const listType = isUl ? 'ul' : 'ol';
+            const listClass = isUl ? 'class="custom-bullet-list"' : '';
+
+            // Jika indentasi berkurang, tutup daftar yang lebih dalam
+            if (currentList && indent < currentList.indent) {
+                closeLists(indent - 1);
             }
-            htmlResult += `  <li><span class="custom-bullet"></span>${applyInlineFormatting(line.substring(2))}</li>\n`;
-        }
-        // Ordered List
-        else if (/^\d+\.\s/.test(line)) {
-            if (inUnorderedList) closeLists();
-            // Cek apakah baris sebelumnya juga ordered list
-            const prevLine = i > 0 ? lines[i - 1] : '';
-            if (!inOrderedList) {
-                htmlResult += '<ol>\n';
-                inOrderedList = true;
-                orderedListNumber = parseInt(line.match(/^(\d+)\.\s/)[1], 10) || 1;
-            } else {
-                // Jika numbering tidak urut, reset numbering
-                const currentNum = parseInt(line.match(/^(\d+)\.\s/)[1], 10) || 1;
-                if (currentNum !== orderedListNumber) {
-                    orderedListNumber = currentNum;
-                }
+            
+            const newCurrentList = listStack.length > 0 ? listStack[listStack.length - 1] : null;
+
+            // Jika tipe daftar berubah pada tingkat yang sama
+            if (newCurrentList && newCurrentList.indent === indent && newCurrentList.type !== listType) {
+                 closeLists(indent);
             }
-            htmlResult += `  <li value="${orderedListNumber}">${applyInlineFormatting(line.replace(/^\d+\.\s/, ''))}</li>\n`;
-            orderedListNumber++;
-            // Cek jika baris berikutnya bukan ordered list, tutup ol
-            const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
-            if (!nextLine.match(/^\d+\.\s/)) {
-                closeLists();
-                orderedListNumber = 1;
+
+            // Jika perlu memulai daftar baru (lebih dalam atau daftar pertama)
+            if (listStack.length === 0 || indent > listStack[listStack.length - 1].indent) {
+                htmlResult += `<${listType} ${listClass}>\n`;
+                listStack.push({ type: listType, indent });
             }
-        }
-        // Horizontal Rule
-        else if (line.trim() === '---' || line.trim() === '***') {
-            closeLists();
-            htmlResult += '<hr>';
-        }
-        // Paragraf atau baris kosong
-        else {
-            closeLists();
-            if (line.trim() !== '') {
-                htmlResult += `<p class="chat-paragraph">${applyInlineFormatting(line)}</p>`;
+            
+            htmlResult += `  <li>${isUl ? '<span class="custom-bullet"></span>' : ''}${applyInlineFormatting(content)}</li>\n`;
+
+        } else {
+            // --- 3. Handle Elemen Lainnya ---
+            closeLists(); // Elemen non-daftar akan menutup semua daftar
+
+            if (trimmedLine.startsWith('# ')) {
+                htmlResult += `<h1>${applyInlineFormatting(trimmedLine.substring(2))}</h1>`;
+            } else if (trimmedLine.startsWith('## ')) {
+                htmlResult += `<h2>${applyInlineFormatting(trimmedLine.substring(3))}</h2>`;
+            } else if (trimmedLine.startsWith('### ')) {
+                htmlResult += `<h3>${applyInlineFormatting(trimmedLine.substring(4))}</h3>`;
+            } else if (trimmedLine.match(/^(---|___|\*\*\*)$/)) {
+                htmlResult += '<hr>';
+            } else if (trimmedLine) {
+                htmlResult += `<p class="chat-paragraph">${applyInlineFormatting(trimmedLine)}</p>`;
             }
         }
     }
 
-    // Pastikan semua tag tertutup di akhir
-    closeLists();
-
+    closeLists(); // Pastikan semua daftar tertutup di akhir
     return htmlResult;
 }
 
@@ -247,6 +228,33 @@ function escapeHtml(str) {
         chatWindow.innerHTML = ''; // Clear chat window content
         chatWindow.classList.add('hidden'); // Hide chat window
         welcomeScreen.classList.remove('hidden'); // Show welcome screen
+    }
+
+    // ==================================================================
+    // MANAJEMEN SIDEBAR RESPONSIVE
+    // ==================================================================
+    
+    /**
+     * Membuat overlay untuk sidebar jika belum ada.
+     */
+    function createSidebarOverlay() {
+        if (!document.getElementById('sidebar-overlay')) {
+            sidebarOverlay = document.createElement('div');
+            sidebarOverlay.className = 'sidebar-overlay';
+            sidebarOverlay.id = 'sidebar-overlay';
+            document.body.appendChild(sidebarOverlay);
+            
+            sidebarOverlay.addEventListener('click', toggleSidebar);
+        }
+    }
+
+    /**
+     * Menampilkan atau menyembunyikan sidebar dan overlay-nya.
+     */
+    function toggleSidebar() {
+        const isVisible = sidebar.classList.contains('show');
+        sidebar.classList.toggle('show');
+        sidebarOverlay.classList.toggle('show');
     }
 
     // ==================================================================
@@ -786,6 +794,15 @@ async function handleDelete(conversationId, itemElement) {
         } else {
             showWelcomeMessage();
         }
+        createSidebarOverlay(); // Siapkan overlay saat aplikasi dimuat
     })();
     userInput.focus();
+
+    // Event listener untuk tombol toggle menu
+    if (menuToggle) {
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleSidebar();
+        });
+    }
 });

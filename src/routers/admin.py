@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 from pypdf import PdfReader
 
 from .. import schemas, services, database as db
@@ -12,47 +13,96 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 
 # Endpoint upload dokumen untuk admin
-@router.post("/upload")
+@router.post("/upload", response_model=schemas.DocumentOut)
 async def upload_document(
     file: UploadFile = File(...),
     admin=Depends(get_current_admin),
     session: AsyncSession = Depends(db.get_db),
 ):
-    # Simpan file ke folder uploads
-    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "uploads") # Adjust path
+    """Upload dan proses dokumen PDF untuk RAG"""
+    
+    # Validasi file
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(
+            status_code=400, 
+            detail="Hanya file PDF yang diperbolehkan"
+        )
+    
+    # Buat nama file yang unik
+    file_extension = file.filename.split('.')[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    
+    # Simpan file
+    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
-    file_path = os.path.join(uploads_dir, file.filename)
-    with open(file_path, "wb") as f:
+    file_path = os.path.join(uploads_dir, unique_filename)
+    
+    try:
         content = await file.read()
-        f.write(content)
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Proses PDF dengan RAG
+        document = await services.process_pdf_document(
+            session, file_path, file.filename, admin.id
+        )
+        
+        return document
+        
+    except Exception as e:
+        # Cleanup jika gagal
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gagal memproses file: {str(e)}"
+        )
 
-    # Proses PDF: ekstrak teks, split per halaman, buat embedding, simpan ke MemoryEmbedding
-    if file.filename.lower().endswith(".pdf"):
-        reader = PdfReader(file_path)
-        for i, page in enumerate(reader.pages):
-            text = page.extract_text() or ""
-            if text.strip():
-                # Simpan ke MemoryEmbedding sebagai "dokumen" milik admin
-                embedding = services.make_embedding(text)
-                mem = db.MemoryEmbedding(
-                    message_id=None,
-                    conversation_id=None,
-                    user_id=str(admin.id),
-                    content_embedding=embedding,
-                    created_at=None,
-                )
-                session.add(mem)
-        await session.commit()
-        return {
-            "filename": file.filename,
-            "status": "uploaded & indexed",
-            "pages": len(reader.pages),
-        }
-    else:
-        return {
-            "filename": file.filename,
-            "status": "uploaded (non-pdf, tidak di-index)",
-        }
+@router.get("/documents", response_model=list[schemas.DocumentOut])
+async def list_documents(
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(db.get_db),
+):
+    """List semua dokumen yang telah diupload"""
+    result = await session.execute(
+        select(db.Document).order_by(db.Document.uploaded_at.desc())
+    )
+    documents = result.scalars().all()
+    
+    # Add total chunks count
+    for doc in documents:
+        chunk_count = await session.execute(
+            select(func.count(db.DocumentChunk.id))
+            .filter(db.DocumentChunk.document_id == doc.id)
+        )
+        doc.total_chunks = chunk_count.scalar()
+    
+    return documents
+
+@router.delete("/documents/{document_id}")
+async def delete_document(
+    document_id: uuid.UUID,
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(db.get_db),
+):
+    """Hapus dokumen dan semua chunk-nya"""
+    result = await session.execute(
+        select(db.Document).filter_by(id=document_id)
+    )
+    document = result.scalars().first()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Hapus file fisik
+    if os.path.exists(document.file_path):
+        os.remove(document.file_path)
+    
+    # Hapus dari database (cascade akan hapus chunks)
+    await session.delete(document)
+    await session.commit()
+    
+    return {"message": "Document deleted successfully"}
 
 
 @router.get(

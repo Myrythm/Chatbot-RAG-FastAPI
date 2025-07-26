@@ -13,3 +13,9 @@ asyncpg
 python-jose
 python-multipart
 pypdf
+
+# LangChain dependencies
+langchain
+langchain-google-genai
+langchain-community
+langchain-text-splitters

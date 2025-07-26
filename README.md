@@ -18,11 +18,12 @@ This project is a robust and interactive AI chatbot implementation using the Goo
   - View conversation history.
   - Rename conversations.
   - Delete conversations.
-- **Conversation Memory (RAG)**: Utilizes pgvector to store message embeddings and retrieve relevant memories from past conversations, providing better context to the AI.
+- **Conversation Memory**: Utilizes pgvector to store message embeddings and retrieve relevant memories from past conversations, providing better context to the AI.
+- **Document Knowledge Base (PDF Upload)**: Upload PDF documents through the admin panel.
 - **Automatic Timezone Detection**: Automatically detects and stores the user's timezone for accurate chat history.
-- **Admin Panel**: A basic interface for user management (login as `admin` with password `admin123` after setup).
+- **Admin Panel**: Interface for managing users and uploading knowledge documents (login as `admin` with password `admin123` after setup).
 - **Responsive Design**: Clean and modern user interface, optimized for both desktop and mobile devices.
-- **Dark/Light Mode**: Toggle between light and dark themes.
+- **Dark/Light Mode**: Toggle between light and dark themes in chatbot section.
 - **Containerized with Docker Compose**: Easy setup and deployment using Docker Compose.
 
 ## Technologies Used
@@ -32,6 +33,8 @@ This project is a robust and interactive AI chatbot implementation using the Goo
   - **SQLAlchemy**: An Object Relational Mapper (ORM) for database interaction.
   - **asyncpg**: An asynchronous PostgreSQL driver.
   - **pgvector**: A PostgreSQL extension for storing and querying vector embeddings.
+  - **LangChain**: Framework for building RAG pipelines and LLM applications.
+  - **PyPDF**: Lightweight PDF parser used for document ingestion.
   - **Google Generative AI SDK**: For interacting with Gemini models.
   - **python-dotenv**: For managing environment variables.
   - **passlib**: For password hashing.
@@ -83,6 +86,7 @@ Ensure you have the following installed on your system:
             ├── login.html
             ├── login.js
             └── login.css
+    └── uploads/          # Uploaded PDF documents
 ```
 
 ## Setup Guide
@@ -150,7 +154,7 @@ docker compose run --rm backend python src/init_db.py
 
 Upon successful execution, you will see output like `Database tables created.`
 
-### 5. Create an Admin User 
+### 5. Create an Admin User
 
 To access the admin panel, you need to create an admin user. The following script will create an `admin` user with the password `admin123`.
 
@@ -179,7 +183,7 @@ Once all setup steps are complete, your application will be running in Docker.
 
 1.  Log in as admin and you will be redirected to `http://localhost:8000/admin` in your browser.
 2.  You can view and manage users here.
-3.  You can provide PDF documents to improve the chatbot’s knowledge through RAG. 
+3.  You can provide PDF documents to improve the chatbot’s knowledge through RAG.
 
 ### Using the Chatbot
 
@@ -187,5 +191,3 @@ Once all setup steps are complete, your application will be running in Docker.
 2.  You will see an engaging welcome screen. Type your message in the input box at the bottom to start a conversation.
 3.  Each new message will start a new conversation if you haven't selected one from the history.
 4.  Your conversation history will appear in the left sidebar. You can click on a history item to resume a previous conversation, rename it, or delete it.
-
-

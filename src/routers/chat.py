@@ -157,7 +157,7 @@ async def generate_conversation_summary(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     summary = await services.generate_summary(
-        session, conversation, services.GEMINI_SUMMARY_MODEL
+        session, conversation
     )
     return {"summary": summary}
 

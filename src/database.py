@@ -76,6 +76,32 @@ class MemoryEmbedding(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+# --- Model Document ---
+class Document(Base):
+    __tablename__ = "documents"
+    id = Column(pgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filename = Column(String, nullable=False)
+    title = Column(String, nullable=True)
+    file_path = Column(String, nullable=False)
+    file_size = Column(String, nullable=True)
+    uploaded_by = Column(pgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    uploaded_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    document_chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
+# --- Model DocumentChunk ---
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    id = Column(pgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(pgUUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    chunk_index = Column(String, nullable=False)  # "page_1", "page_2", etc.
+    content = Column(Text, nullable=False)
+    content_embedding = Column(Vector(768), nullable=False)  # Gemini embedding size
+    page_number = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    document = relationship("Document", back_populates="document_chunks")
+
+
 async def get_db():
     async with async_session() as session:
         yield session

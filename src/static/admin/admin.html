@@ -35,8 +35,14 @@
     <main class="admin-main">
       <section class="admin-section" id="section-upload">
         <h2>Upload Dokumen RAG</h2>
-        <form id="upload-form" class="form-modern">
-          <input type="file" id="doc-file" required>
+        <form id="upload-form" class="form-modern" enctype="multipart/form-data">
+          <div id="drop-area" class="drop-area">
+            <input type="file" id="doc-file" style="display:none;" required>
+            <div id="drop-message">Drag & drop PDF di sini atau klik untuk memilih file</div>
+          </div>
+          <div id="upload-progress" class="progress-bar" style="display:none;">
+            <div id="progress-bar-fill" class="progress-bar-fill"></div>
+          </div>
           <button type="submit" class="btn-glass">Upload</button>
         </form>
         <div id="upload-status" class="form-message"></div>
@@ -88,8 +94,23 @@
         </div>
       </section>
       <section class="admin-section" id="section-documents">
-        <h2>Daftar Dokumen RAG (Coming Soon)</h2>
-        <div class="admin-documents-list" id="admin-documents-list"></div>
+        <h2>Daftar Dokumen RAG</h2>
+        <div id="documents-loading" class="form-message" style="display:none;">Memuat data dokumen...</div>
+        <table id="documents-table" class="users-table" style="margin-top:1rem;display:none;">
+          <thead>
+            <tr>
+              <th>Nama File</th>
+              <th>Tanggal Upload</th>
+              <th>Uploader</th>
+              <th>Jumlah Chunk</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="documents-table-body">
+            <!-- Rows will be injected by JS -->
+          </tbody>
+        </table>
+        <div id="documents-empty" class="form-message" style="display:none;">Belum ada dokumen diupload.</div>
       </section>
       <section class="admin-section" id="section-register">
         <h2>Register User Baru</h2>

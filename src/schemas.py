@@ -91,3 +91,34 @@ class ConversationDetail(BaseModel):
 #  RENAME
 class ConversationUpdate(BaseModel):
     summary: str
+
+
+# Document schemas
+class DocumentBase(BaseModel):
+    filename: str
+    title: Optional[str] = None
+    file_size: Optional[str] = None
+
+class DocumentCreate(DocumentBase):
+    pass
+
+class DocumentOut(DocumentBase):
+    id: uuid.UUID
+    uploaded_by: uuid.UUID
+    uploaded_at: datetime
+    is_active: bool
+    total_chunks: Optional[int] = 0
+
+    class Config:
+        from_attributes = True
+
+class DocumentChunkOut(BaseModel):
+    id: uuid.UUID
+    document_id: uuid.UUID
+    chunk_index: str
+    content: str
+    page_number: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -292,3 +292,72 @@ body {
   .admin-main { padding: 1rem; }
   .admin-section { padding: 1rem; }
 }
+/* Drag & Drop Upload */
+.drop-area {
+  border: 2px dashed #6366f1;
+  border-radius: 12px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  background: #f8fafc;
+  color: #6366f1;
+  font-size: 1.1em;
+  margin-bottom: 1rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.drop-area.dragover {
+  background: #e0e7ff;
+  border-color: #6366f1;
+}
+#drop-message {
+  font-size: 1.1em;
+  color: #6366f1;
+}
+.progress-bar {
+  width: 100%;
+  background: #e0e7ff;
+  border-radius: 8px;
+  height: 18px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(99,102,241,0.08);
+}
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6366f1 60%, #818cf8 100%);
+  border-radius: 8px;
+  transition: width 0.3s;
+}
+#upload-status {
+  margin-top: 0.5rem;
+  font-size: 1.05em;
+  min-height: 1.5em;
+}
+#upload-status span {
+  font-weight: 600;
+}
+#documents-loading {
+  color: #6366f1;
+  font-style: italic;
+  margin-bottom: 1rem;
+}
+#documents-empty {
+  color: #64748b;
+  font-style: italic;
+  margin-top: 1rem;
+}
+.btn-delete-doc {
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3em 0.9em;
+  cursor: pointer;
+  font-size: 0.95em;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-delete-doc:hover {
+  background: #dc2626;
+  color: #fff;
+}

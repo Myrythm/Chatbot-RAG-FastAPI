@@ -684,15 +684,7 @@ body.dark-mode .welcome-icon {
     border-bottom: 1px solid var(--border-color);
     background: var(--blur-bg);
     backdrop-filter: blur(20px);
-    z-index: 5;
-}
-
-.chat-status {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
+    z-index: 100;
 }
 
 .status-dot {
@@ -764,12 +756,7 @@ body.dark-mode .welcome-icon {
     word-wrap: break-word;
 }
 
-.message.user .message-bubble {
-    background: var(--bg-accent);
-    color: white;
-    border-bottom-right-radius: var(--radius-sm);
-    box-shadow: var(--shadow-lg);
-}
+/* User bubble styling moved to UX improvements section */
 
 .message.bot .message-bubble {
     background: var(--bg-primary);
@@ -1125,49 +1112,336 @@ body.light-mode .modal-overlay {
 }
 
 /* =================================================
-   Styling untuk Elemen Markdown Umum
+   ENHANCED CHAT EXPERIENCE
    ================================================= */
 
-.message-bubble h1,
-.message-bubble h2,
-.message-bubble h3 {
-    margin-top: var(--space-6);
-    margin-bottom: var(--space-4);
+/* --- Layout & Readability --- */
+.messages-container {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem; /* Reduced gap for a tighter feel */
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+    scroll-behavior: smooth;
+}
+
+/* --- Message Entry Animation --- */
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+}
+}
+
+.message {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    animation: messageSlideIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.message.user {
+    justify-content: flex-end;
+}
+
+/* --- Avatars --- */
+.message-avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 500;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-md);
+    position: sticky;
+    top: 1rem;
+    color: white;
+}
+
+.message.user .message-avatar {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+}
+
+.message.bot .message-avatar {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+/* --- Message Bubbles --- */
+.message-bubble {
+    max-width: 80%;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1.25rem;
+    line-height: 1.7;
+    word-wrap: break-word;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message.user .message-bubble {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #ffffff;
+    border-bottom-right-radius: 0.5rem;
+    box-shadow: 0 8px 30px -10px rgba(99, 102, 241, 0.5);
+}
+
+.message.bot .message-bubble {
+    background: var(--bg-primary);
     color: var(--text-primary);
-    line-height: 1.3;
+    border: 1px solid var(--border-color);
+    border-bottom-left-radius: 0.5rem;
+    box-shadow: var(--shadow-md);
 }
 
-.message-bubble h1 { font-size: 1.5em; }
-.message-bubble h2 { font-size: 1.25em; }
-.message-bubble h3 { font-size: 1.1em; font-weight: 600; }
-
-.message-bubble p {
-    margin-bottom: var(--space-4);
+.message-bubble:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
 }
-.message-bubble p:last-child {
+
+/* --- Typography Inside Bubbles --- */
+.message-bubble > *:first-child {
+    margin-top: 0;
+}
+.message-bubble > *:last-child {
     margin-bottom: 0;
 }
 
-.message-bubble ul,
-.message-bubble ol {
-    margin-bottom: var(--space-4);
-    padding-left: var(--space-6);
+.message-bubble p {
+    margin: 0 0 1rem 0;
+}
+
+.message-bubble h1, .message-bubble h2, .message-bubble h3, .message-bubble h4 {
+    margin: 1.5rem 0 0.75rem 0;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+.user .message-bubble h1, .user .message-bubble h2, .user .message-bubble h3, .user .message-bubble h4 {
+    color: white;
+}
+
+.message-bubble h1 { font-size: 1.4em; }
+.message-bubble h2 { font-size: 1.2em; }
+.message-bubble h3 { font-size: 1.1em; }
+
+.message-bubble ul, .message-bubble ol {
+    margin: 0.75rem 0;
+    padding-left: 1.5rem;
 }
 
 .message-bubble li {
-    margin-bottom: var(--space-2);
+    margin-bottom: 0.5rem;
+    position: relative;
+    padding-left: 0.5rem;
+}
+
+.message-bubble ul li {
+    list-style-type: none;
+}
+
+.message-bubble ul li::before {
+    content: '';
+    position: absolute;
+    left: -0.75rem;
+    top: 0.6em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #8b5cf6;
+}
+.user .message-bubble ul li::before {
+    background: white;
+}
+body.dark-mode .message.bot .message-bubble ul li::before {
+    background: #a5b4fc;
+}
+
+.message-bubble strong {
+    font-weight: 600;
+    color: #4f46e5;
+}
+body.dark-mode .message.bot .message-bubble strong {
+    color: #a5b4fc;
+}
+.user .message-bubble strong {
+    color: white;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.1em 0.4em;
+    border-radius: 5px;
+}
+
+.message-bubble code {
+    background: var(--bg-tertiary);
     color: var(--text-secondary);
+    padding: 0.2em 0.4em;
+    border-radius: 5px;
+    font-size: 0.9em;
+    font-family: 'Fira Mono', monospace;
+    border: 1px solid var(--border-color);
+}
+.user .message-bubble code {
+    background: rgba(0, 0, 0, 0.2);
+    color: #e0e7ff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-bubble a {
+    color: #4f46e5;
+    font-weight: 700; /* Dibuat tebal */
+    text-decoration: none;
+    border-bottom: 2px solid rgba(79, 70, 229, 0.2);
+    transition: all 0.2s;
+}
+.message-bubble a:hover {
+    background: rgba(79, 70, 229, 0.1);
+}
+.user .message-bubble a {
+    color: #e0e7ff;
+    border-bottom-color: rgba(224, 231, 255, 0.5);
+}
+
+body.dark-mode .message.bot .message-bubble a {
+    color: #c4b5fd; /* Warna ungu cerah untuk dark mode */
+    border-bottom-color: rgba(196, 181, 253, 0.3);
+}
+
+body.dark-mode .message.bot .message-bubble a:hover {
+    background: rgba(196, 181, 253, 0.1);
 }
 
 .message-bubble hr {
     border: none;
     border-top: 1px solid var(--border-color);
-    margin: var(--space-6) 0;
+    margin: 1.5rem 0;
+}
+.user .message-bubble hr {
+    border-top-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Penyesuaian agar tidak ada margin atas pada elemen pertama */
-.message-bubble > *:first-child {
-    margin-top: 0;
+/* --- Responsive Design --- */
+@media (max-width: 768px) {
+    .messages-container {
+        padding: 1rem;
+    }
+    .message {
+        gap: 0.5rem;
+    }
+    .message-avatar {
+        width: 2.25rem;
+        height: 2.25rem;
+        font-size: 1rem;
+    }
+    .message-bubble {
+        max-width: 85%;
+        padding: 0.8rem 1.1rem;
+        font-size: 0.95rem;
+}
+
+    .sidebar {
+        position: fixed;
+        left: -340px; /* Sembunyikan di luar layar */
+        height: 100%;
+        z-index: 1000;
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: var(--shadow-xl);
+    }
+    .sidebar.show {
+        left: 0; /* Tampilkan saat kelas .show ditambahkan */
+    }
+
+    .menu-toggle-btn {
+        display: block; /* Tampilkan tombol di mobile */
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.25rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        margin-right: 0.5rem;
+        z-index: 1001; /* Pastikan tombol di atas segalanya */
+    }
+
+.chat-header {
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    }
+}
+
+/* Sembunyikan tombol di desktop */
+.menu-toggle-btn {
+    display: none;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    z-index: 1001; /* Pastikan tetap di atas */
+}
+
+@media (max-width: 768px) {
+    .chat-header {
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .menu-toggle-btn {
+        display: block; /* Tampilkan tombol di mobile */
+    }
+}
+
+/* Overlay for when sidebar is open */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+.sidebar-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* =================================================
+   CUSTOM SCROLLBAR
+   ================================================= */
+.messages-container::-webkit-scrollbar {
+    width: 12px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    border-radius: 6px;
+    border: 3px solid var(--bg-secondary);
+    transition: background-color 0.2s ease-in-out;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-muted);
 }
 
 
