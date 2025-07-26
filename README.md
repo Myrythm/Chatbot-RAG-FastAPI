@@ -1,4 +1,4 @@
-# RAG-Enhanced Chatbot with Google Gemini and FastAPI
+# RAG-Enhanced Chatbot with Langchain, Gemini, and FastAPI
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
