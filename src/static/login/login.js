@@ -68,6 +68,8 @@ document.addEventListener('DOMContentLoaded', function() {
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('user_role', data.role);
         localStorage.setItem('username', username);
+        // Simpan token juga sebagai cookie agar server dapat membaca saat memuat halaman statis
+        document.cookie = `access_token=${data.access_token}; path=/; SameSite=Lax`; 
         
         btnText.textContent = 'Success!';
         loginBtn.style.background = 'var(--success-color)';

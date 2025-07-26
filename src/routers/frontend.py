@@ -1,6 +1,7 @@
 import os
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
+from .auth import get_current_user, get_current_admin
 
 router = APIRouter(tags=["Frontend"])
 
@@ -21,10 +22,10 @@ def root():
 
 
 @router.get("/admin", response_class=HTMLResponse)
-def serve_admin():
+def serve_admin(current_admin=Depends(get_current_admin)):
     return serve_html("admin.html", subdir="admin")
 
 
 @router.get("/chat", response_class=HTMLResponse)
-def serve_chat():
+def serve_chat(current_user=Depends(get_current_user)):
     return serve_html("index.html", subdir="chat")

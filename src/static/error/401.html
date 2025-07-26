@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unauthorized - Gemini Chatbot</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <!-- Re-use existing login theme -->
+  <link rel="stylesheet" href="/static/login/login.css">
+  <style>
+    .error-card .brand-icon { animation: none; }
+    .error-message-main { color: var(--text-secondary); margin-top: 1rem; text-align: center; }
+    .back-btn {
+      width: 100%;
+      padding: 0.875rem 1.5rem;
+      background: var(--primary-gradient);
+      border: none;
+      border-radius: var(--radius-md);
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .back-btn:hover { background: var(--primary-hover); }
+  </style>
+</head>
+<body>
+  <div class="bg-particles">
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+  </div>
+
+  <div class="container">
+    <div class="login-card error-card">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fas fa-triangle-exclamation"></i>
+        </div>
+        <h1>Unauthorized</h1>
+        <p class="error-message-main">You must sign in to access this page.</p>
+      </div>
+      <button class="back-btn" onclick="window.location.href='/'">
+        <i class="fas fa-arrow-left"></i> Go to Login
+      </button>
+    </div>
+  </div>
+</body>
+</html> 

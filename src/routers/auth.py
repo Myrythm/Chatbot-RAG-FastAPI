@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import JWTError, jwt
@@ -7,18 +7,29 @@ from .. import schemas, services, database as db
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# Allow graceful fallback if token header is missing (auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 # Dependency: get current user
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(db.get_db)
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(db.get_db),
+    access_token_cookie: str | None = Cookie(default=None, alias="access_token"),
 ):
     credentials_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    # If token is absent in Authorization header, fallback to cookie
+    if token is None:
+        token = access_token_cookie
+
+    if not token:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(
             token, services.SECRET_KEY, algorithms=[services.ALGORITHM]
@@ -79,6 +90,7 @@ async def register_user(
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(db.get_db),
+    response: Response = None,
 ):
     user = await services.authenticate_user(
         session, form_data.username, form_data.password
@@ -90,6 +102,16 @@ async def login(
     access_token = services.create_access_token(
         data={"sub": user.username, "role": user.role}
     )
+
+    # Set HTTP-only cookie for browser access; token still returned in body for JS usage
+    if response is not None:
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            samesite="lax",
+        )
+
     return {"access_token": access_token, "token_type": "bearer", "role": user.role}
 
 
