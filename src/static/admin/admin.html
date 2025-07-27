@@ -18,22 +18,26 @@
           </div>
         </div>
       </div>
-      <div class="sidebar-section">
+      <div class="sidebar-content">
         <div id="admin-info" class="admin-info"></div>
         <nav class="admin-nav">
           <ul>
-            <li><a href="#upload" class="admin-nav-link" id="nav-upload"><i class="fas fa-upload"></i> Upload Dokumen</a></li>
-            <li><a href="#users" class="admin-nav-link" id="nav-users"><i class="fas fa-users"></i> Daftar User</a></li>
+            <li><a href="#upload" class="admin-nav-link active" id="nav-upload"><i class="fas fa-upload"></i> Upload Dokumen</a></li>
             <li><a href="#documents" class="admin-nav-link" id="nav-documents"><i class="fas fa-file-alt"></i> Daftar Dokumen</a></li>
             <li><a href="#register" class="admin-nav-link" id="nav-register"><i class="fas fa-user-plus"></i> Register User</a></li>
-            <li><button class="btn-glass" onclick="logout()" style="width:100%;margin-top:1rem;"><i class="fas fa-sign-out-alt"></i> Logout</button></li>
+            <li><a href="#users" class="admin-nav-link" id="nav-users"><i class="fas fa-users"></i> Daftar User</a></li>
+            <li><button class="btn-glass" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></li>
           </ul>
         </nav>
       </div>
-      <!-- Register User dipindah ke main section -->
     </aside>
     <main class="admin-main">
-      <section class="admin-section" id="section-upload">
+      <header class="mobile-header">
+        <button id="mobile-menu-toggle" aria-label="Toggle Menu">
+            <i class="fas fa-bars"></i>
+        </button>
+      </header>
+      <section class="admin-section active" id="section-upload">
         <h2>Upload Dokumen RAG</h2>
         <form id="upload-form" class="form-modern" enctype="multipart/form-data">
           <div id="drop-area" class="drop-area">
@@ -67,26 +71,34 @@
           <div id="users-message" class="form-message"></div>
         </div>
         <!-- Modal Edit User -->
-        <div id="edit-user-modal" class="modal" style="display:none;">
+        <div id="edit-user-modal" class="modal">
           <div class="modal-content">
             <span class="close" id="close-edit-user-modal">&times;</span>
             <h3>Edit User</h3>
             <form id="edit-user-form" class="form-modern">
               <input type="hidden" id="edit-user-id">
-              <label>Username</label>
-              <input type="text" id="edit-username" required>
-              <label>Password (kosongkan jika tidak diubah)</label>
-              <input type="password" id="edit-password">
-              <label>Role</label>
-              <select id="edit-role">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-              <label>Status</label>
-              <select id="edit-active">
-                <option value="true">Aktif</option>
-                <option value="false">Nonaktif</option>
-              </select>
+              <div class="form-group">
+                <label for="edit-username">Username</label>
+                <input type="text" id="edit-username" required>
+              </div>
+              <div class="form-group">
+                <label for="edit-password">Password (kosongkan jika tidak diubah)</label>
+                <input type="password" id="edit-password">
+              </div>
+              <div class="form-group">
+                <label for="edit-role">Role</label>
+                <select id="edit-role">
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="edit-active">Status</label>
+                <select id="edit-active">
+                  <option value="true">Aktif</option>
+                  <option value="false">Nonaktif</option>
+                </select>
+              </div>
               <button type="submit" class="btn-glass">Simpan</button>
             </form>
             <div id="edit-user-message" class="form-message"></div>
@@ -127,6 +139,22 @@
       </section>
     </main>
   </div>
+
+  <div class="overlay"></div>
+
+  <!-- Universal Confirmation Modal -->
+  <div id="confirm-modal" class="modal">
+    <div class="modal-content">
+        <h3 id="confirm-modal-title">Konfirmasi Aksi</h3>
+        <p id="confirm-modal-text">Apakah Anda yakin ingin melanjutkan?</p>
+        <div class="modal-actions">
+            <button id="confirm-modal-cancel" class="btn-glass btn-secondary">Batal</button>
+            <button id="confirm-modal-confirm" class="btn-glass">Konfirmasi</button>
+        </div>
+    </div>
+  </div>
+
   <script src="/static/admin/admin.js"></script>
+  <script src="/static/admin/overlay.js"></script>
 </body>
 </html>

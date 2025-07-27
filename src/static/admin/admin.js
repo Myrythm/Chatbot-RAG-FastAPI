@@ -1,49 +1,66 @@
 // Navigasi sidebar ke section & tampilkan/hide section sesuai menu
 document.addEventListener('DOMContentLoaded', function() {
-  function showSection(section) {
-    // Sembunyikan semua section utama
-    document.querySelectorAll('.admin-section').forEach(s => s.style.display = 'none');
-    // Sembunyikan section register di main
-    document.getElementById('section-register').style.display = 'none';
-    // Tampilkan section yang dipilih
-    if (section === 'upload') {
-      document.getElementById('section-upload').style.display = '';
-    } else if (section === 'users') {
-      document.getElementById('section-users').style.display = '';
-    } else if (section === 'documents') {
-      document.getElementById('section-documents').style.display = '';
-    } else if (section === 'register') {
-      document.getElementById('section-register').style.display = '';
+  const navLinks = document.querySelectorAll('.admin-nav-link');
+  const sections = document.querySelectorAll('.admin-section');
+  const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+  const sidebar = document.querySelector('.admin-sidebar');
+
+  if (mobileMenuToggle) {
+    mobileMenuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+  }
+
+  function showSection(sectionId) {
+    sections.forEach(section => {
+      if (section.id === sectionId) {
+        section.classList.add('active');
+      } else {
+        section.classList.remove('active');
+      }
+    });
+  }
+
+  function setActiveNav(activeLink) {
+    navLinks.forEach(link => {
+      link.classList.remove('active');
+    });
+    if (activeLink) {
+      activeLink.classList.add('active');
     }
   }
-  // Default tampilkan upload
-  showSection('upload');
 
-  document.getElementById('nav-upload')?.addEventListener('click', function(e) {
-    e.preventDefault();
-    showSection('upload');
-    setActiveNav(this);
+  navLinks.forEach(link => {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      const sectionName = this.getAttribute('href').substring(1);
+      showSection(`section-${sectionName}`);
+      setActiveNav(this);
+
+      // Special handling for fetching data on click
+      if (sectionName === 'users') {
+        fetchAndRenderUsers();
+      } else if (sectionName === 'documents') {
+        fetchAndRenderDocuments();
+      }
+    });
   });
-  document.getElementById('nav-users')?.addEventListener('click', function(e) {
-    e.preventDefault();
-    showSection('users');
-    setActiveNav(this);
-  });
-  document.getElementById('nav-documents')?.addEventListener('click', function(e) {
-    e.preventDefault();
-    showSection('documents');
-    setActiveNav(this);
-  });
-  document.getElementById('nav-register')?.addEventListener('click', function(e) {
-    e.preventDefault();
-    showSection('register');
-    setActiveNav(this);
-  });
-  function setActiveNav(link) {
-    document.querySelectorAll('.admin-nav-link').forEach(l => l.classList.remove('active'));
-    link.classList.add('active');
+
+  // Initial state
+  const initialActiveLink = document.querySelector('.admin-nav-link.active');
+  if (initialActiveLink) {
+    const initialSectionName = initialActiveLink.getAttribute('href').substring(1);
+    showSection(`section-${initialSectionName}`);
+  } else {
+    // Fallback if no link is active by default in the HTML
+    showSection('section-upload');
+    const uploadLink = document.getElementById('nav-upload');
+    if (uploadLink) {
+      uploadLink.classList.add('active');
+    }
   }
 });
+
 // Cek role admin & tampilkan info
 window.onload = function() {
   const token = localStorage.getItem('access_token');
@@ -62,30 +79,74 @@ window.onload = function() {
 // === USER CRUD ===
 document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('section-users')) {
-    fetchAndRenderUsers();
+    // Initial fetch is now handled by nav click, but we can keep this for safety.
+    // fetchAndRenderUsers(); 
+    
     // Event delegation for edit & delete buttons
     document.getElementById('users-table-body').addEventListener('click', function(e) {
-      if (e.target.classList.contains('btn-edit-user')) {
-        openEditUserModal(e.target.dataset.userid);
-      } else if (e.target.classList.contains('btn-delete-user')) {
-        deleteUser(e.target.dataset.userid, e.target.dataset.username);
+      const editButton = e.target.closest('.btn-edit-user');
+      if (editButton) {
+        openEditUserModal(editButton.dataset.userid);
+        return;
+      }
+      
+      const deleteButton = e.target.closest('.btn-delete-user');
+      if (deleteButton) {
+        deleteUser(deleteButton.dataset.userid, deleteButton.dataset.username);
       }
     });
     // Modal close
     document.getElementById('close-edit-user-modal').onclick = closeEditUserModal;
     window.onclick = function(event) {
-      const modal = document.getElementById('edit-user-modal');
-      if (event.target === modal) closeEditUserModal();
+      const editModal = document.getElementById('edit-user-modal');
+      if (event.target === editModal) closeEditUserModal();
+      
+      const confirmModal = document.getElementById('confirm-modal');
+      if (event.target === confirmModal) {
+          confirmModal.classList.remove('active');
+      }
     };
     // Edit user form submit
     document.getElementById('edit-user-form').onsubmit = submitEditUser;
   }
 });
 
+// --- Universal Confirmation Modal Logic ---
+const confirmModal = document.getElementById('confirm-modal');
+const confirmModalTitle = document.getElementById('confirm-modal-title');
+const confirmModalText = document.getElementById('confirm-modal-text');
+const confirmBtn = document.getElementById('confirm-modal-confirm');
+const cancelBtn = document.getElementById('confirm-modal-cancel');
+let confirmCallback = null;
+
+function showConfirmModal(title, text, confirmButtonClass, onConfirm) {
+    confirmModalTitle.textContent = title;
+    confirmModalText.textContent = text;
+    confirmBtn.className = 'btn-glass'; // Reset classes
+    if (confirmButtonClass) {
+        confirmBtn.classList.add(confirmButtonClass);
+    }
+    confirmModal.classList.add('active');
+    confirmCallback = onConfirm;
+}
+
+confirmBtn.addEventListener('click', () => {
+    if (confirmCallback) {
+        confirmCallback();
+    }
+    confirmModal.classList.remove('active');
+});
+
+cancelBtn.addEventListener('click', () => {
+    confirmModal.classList.remove('active');
+});
+
+
 async function fetchAndRenderUsers() {
   const tbody = document.getElementById('users-table-body');
   const msg = document.getElementById('users-message');
-  tbody.innerHTML = '';
+  if (!tbody) return; // Exit if table body not on page
+  tbody.innerHTML = ''; // Hilangkan "Memuat data user..."
   msg.textContent = '';
   try {
   const res = await fetch('/api/admin/users', {
@@ -97,6 +158,7 @@ async function fetchAndRenderUsers() {
       tbody.innerHTML = '<tr><td colspan="5">Tidak ada user</td></tr>';
       return;
     }
+    tbody.innerHTML = ''; // Pastikan tabel bersih sebelum menambahkan baris baru
     users.forEach(user => {
       tbody.innerHTML += `
         <tr>
@@ -104,9 +166,9 @@ async function fetchAndRenderUsers() {
           <td>${user.username}</td>
           <td>${user.role}</td>
           <td>${user.is_active ? 'Aktif' : 'Nonaktif'}</td>
-          <td>
-            <button class="btn-glass btn-edit-user" data-userid="${user.id}">Edit</button>
-            <button class="btn-glass btn-delete-user" data-userid="${user.id}" data-username="${user.username}">Hapus</button>
+          <td class="actions-cell">
+            <button class="btn-glass btn-icon btn-edit-user" title="Edit User" data-userid="${user.id}"><i class="fas fa-pencil-alt"></i></button>
+            <button class="btn-glass btn-icon btn-delete-user" title="Hapus User" data-userid="${user.id}" data-username="${user.username}"><i class="fas fa-trash-alt"></i></button>
           </td>
         </tr>`;
     });
@@ -125,10 +187,10 @@ function openEditUserModal(userId) {
   document.getElementById('edit-active').value = row.children[3].textContent === 'Aktif' ? 'true' : 'false';
   document.getElementById('edit-password').value = '';
   document.getElementById('edit-user-message').textContent = '';
-  document.getElementById('edit-user-modal').style.display = 'block';
+  document.getElementById('edit-user-modal').classList.add('active');
 }
 function closeEditUserModal() {
-  document.getElementById('edit-user-modal').style.display = 'none';
+  document.getElementById('edit-user-modal').classList.remove('active');
 }
 
 async function submitEditUser(e) {
@@ -165,24 +227,42 @@ async function submitEditUser(e) {
 }
 
 async function deleteUser(userId, username) {
-  if (!confirm(`Hapus user '${username}'?`)) return;
-  const msg = document.getElementById('users-message');
-  msg.textContent = 'Menghapus...';
-  try {
-    const res = await fetch(`/api/admin/users/${userId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
-    });
-    if (!res.ok) {
-      let err = 'Gagal hapus user';
-      try { err = (await res.json()).detail || err; } catch {}
-      throw new Error(err);
-    }
-    msg.textContent = 'User berhasil dihapus!';
-    fetchAndRenderUsers();
-  } catch (err) {
-    msg.textContent = err.message;
-  }
+    showConfirmModal(
+        'Hapus User',
+        `Apakah Anda yakin ingin menghapus user '${username}'? Aksi ini tidak dapat dibatalkan.`,
+        'btn-delete-user',
+        async () => {
+            const msg = document.getElementById('users-message');
+            msg.textContent = 'Menghapus...';
+            
+            const deleteButton = document.querySelector(`.btn-delete-user[data-userid="${userId}"]`);
+            const originalIcon = deleteButton ? deleteButton.innerHTML : '<i class="fas fa-trash-alt"></i>';
+            if (deleteButton) {
+                deleteButton.disabled = true;
+                deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            }
+
+            try {
+                const res = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+                });
+                if (!res.ok) {
+                    let err = 'Gagal hapus user';
+                    try { err = (await res.json()).detail || err; } catch {}
+                    throw new Error(err);
+                }
+                msg.textContent = 'User berhasil dihapus!';
+                fetchAndRenderUsers();
+            } catch (err) {
+                msg.textContent = err.message;
+                if (deleteButton) {
+                    deleteButton.innerHTML = originalIcon;
+                    deleteButton.disabled = false;
+                }
+            }
+        }
+    );
 }
 
 // === UPLOAD DOKUMEN INTERAKTIF ===
@@ -269,6 +349,9 @@ async function fetchAndRenderDocuments() {
   const table = document.getElementById('documents-table');
   const tbody = document.getElementById('documents-table-body');
   const empty = document.getElementById('documents-empty');
+
+  if (!loading) return; // Exit if elements not on page
+
   loading.style.display = 'block';
   table.style.display = 'none';
   empty.style.display = 'none';
@@ -290,7 +373,7 @@ async function fetchAndRenderDocuments() {
         <td>${new Date(doc.uploaded_at).toLocaleString()}</td>
         <td>${doc.uploaded_by}</td>
         <td>${doc.total_chunks || 0}</td>
-        <td><button class="btn-glass btn-delete-doc" data-docid="${doc.id}">&#128465; Hapus</button></td>
+        <td class="actions-cell"><button class="btn-glass btn-icon btn-delete-doc" title="Hapus Dokumen" data-docid="${doc.id}"><i class="fas fa-trash-alt"></i></button></td>
       </tr>`;
     });
     table.style.display = '';
@@ -304,23 +387,36 @@ async function fetchAndRenderDocuments() {
 
 document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('section-documents')) {
-    fetchAndRenderDocuments();
+    // fetchAndRenderDocuments(); // Data is now fetched on nav click
     document.getElementById('documents-table-body').addEventListener('click', async function(e) {
-      if (e.target.classList.contains('btn-delete-doc')) {
-        const docid = e.target.dataset.docid;
-        if (!confirm('Hapus dokumen ini?')) return;
-        e.target.disabled = true;
-        e.target.textContent = 'Menghapus...';
-        try {
-          const res = await fetch(`/api/admin/documents/${docid}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
-          });
-          if (!res.ok) throw new Error('Gagal hapus dokumen');
-          await fetchAndRenderDocuments();
-        } catch (err) {
-          e.target.textContent = 'Gagal';
-        }
+      const deleteButton = e.target.closest('.btn-delete-doc');
+      if (deleteButton) {
+        const docId = deleteButton.dataset.docid;
+        const fileName = deleteButton.closest('tr').querySelector('td').textContent;
+        
+        showConfirmModal(
+            'Hapus Dokumen',
+            `Apakah Anda yakin ingin menghapus dokumen '${fileName}'? Aksi ini tidak dapat dibatalkan.`,
+            'btn-delete-doc',
+            async () => {
+                const originalIcon = deleteButton.innerHTML;
+                deleteButton.disabled = true;
+                deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+                try {
+                    const res = await fetch(`/api/admin/documents/${docId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+                    });
+                    if (!res.ok) throw new Error('Gagal hapus dokumen');
+                    await fetchAndRenderDocuments();
+                } catch (err) {
+                    deleteButton.innerHTML = originalIcon;
+                    deleteButton.disabled = false;
+                    // Optionally show an error message next to the button or in a general message area
+                }
+            }
+        );
       }
     });
   }
